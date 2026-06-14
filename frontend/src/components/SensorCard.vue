@@ -10,7 +10,6 @@ const iconMap: Record<SensorReading['key'], string> = {
   humidity: '◌',
   temperature: '℃',
   distance: '↔',
-  brightness: '◐',
 }
 </script>
 

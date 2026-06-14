@@ -12,6 +12,11 @@ backend/.env
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/*.sqlite3
+backend/data/snapshots/*.jpg
+
+# Frontend local build/dependencies
+frontend/node_modules/
+frontend/dist/
 
 # IDE
 .vscode/

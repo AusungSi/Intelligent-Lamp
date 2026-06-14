@@ -10,10 +10,17 @@ DEFAULT_CONFIG = {
     "heartbeat_interval_seconds": 5,
     "config_refresh_seconds": 60,
     "camera_enabled": True,
-    "camera_frame_interval_ms": 200,
+    "camera_frame_interval_ms": 300,
     "camera_framesize": "QVGA",
-    "presence_distance_mm": 1200,
+    "camera_vflip": 1,
+    "camera_brightness": 1,
+    "local_camera_stream_enabled": True,
+    "local_camera_stream_port": 80,
+    "local_camera_frame_interval_ms": 120,
     "connect_timeout_seconds": 10,
+    "lamp_brightness_pin": None,
+    "lamp_warm_pin": None,
+    "lamp_cool_pin": None,
 }
 
 

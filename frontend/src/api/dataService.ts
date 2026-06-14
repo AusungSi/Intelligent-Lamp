@@ -2,8 +2,6 @@ import * as client from '@/api/client'
 import type {
   CurrentStatusPayload,
   EventRecord,
-  LampControlState,
-  LampSettings,
   StudySession,
   TelemetryRecord,
   TodaySummaryPayload,
@@ -15,8 +13,6 @@ export async function loadCurrentStatus(): Promise<CurrentStatusPayload> {
     telemetry: response.telemetry,
     heartbeat: response.heartbeat,
     latest_event: response.latest_event,
-    settings: response.settings,
-    lamp_control: response.lamp_control,
   }
 }
 
@@ -58,19 +54,4 @@ export async function loadTodaySummary(): Promise<TodaySummaryPayload> {
     total_warning_count: response.total_warning_count,
     total_leave_count: response.total_leave_count,
   }
-}
-
-export async function loadSettings(): Promise<LampSettings> {
-  const response = await client.fetchSettings()
-  return response.settings
-}
-
-export async function persistSettings(settings: LampSettings): Promise<LampSettings> {
-  const response = await client.saveSettings(settings)
-  return response.settings
-}
-
-export async function persistLampControl(control: LampControlState): Promise<LampControlState> {
-  const response = await client.saveLampControl(control)
-  return response.lamp_control ?? control
 }

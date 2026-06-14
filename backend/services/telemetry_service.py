@@ -1,10 +1,14 @@
 import json
 import time
 
-from backend.services import lamp_service, snapshot_store, summary_service
-from backend.services.db import execute, fetch_all, fetch_one, get_settings, get_threshold_settings
+from backend.services import snapshot_store, summary_service
+from backend.services.db import execute, fetch_all, fetch_one
 
-SNAPSHOT_EVENT_TYPES = frozenset({"distance_too_close", "presence_away"})
+DEFAULT_SNAPSHOT_EVENT_TYPES = frozenset({"distance_too_close", "presence_away"})
+
+
+def _snapshot_event_types():
+    return DEFAULT_SNAPSHOT_EVENT_TYPES
 
 
 def save_telemetry(payload):
@@ -66,7 +70,7 @@ def attach_event_snapshot(event_id, jpeg_bytes):
     event = fetch_one("SELECT * FROM events WHERE id = ?", (event_id,))
     if event is None:
         return False
-    if event.get("event_type") not in SNAPSHOT_EVENT_TYPES:
+    if event.get("event_type") not in _snapshot_event_types():
         return False
 
     snapshot_path = snapshot_store.save_event_snapshot(event_id, jpeg_bytes)
@@ -208,7 +212,7 @@ def _serialize_event(row):
 
     event = dict(row)
     event["extra_json"] = json.loads(event["extra_json"]) if event.get("extra_json") else {}
-    if event.get("has_snapshot") and event.get("event_type") in SNAPSHOT_EVENT_TYPES:
+    if event.get("has_snapshot") and event.get("event_type") in _snapshot_event_types():
         event["snapshot_url"] = f"/api/status/events/{event['id']}/snapshot.jpg"
     else:
         event["snapshot_url"] = None
@@ -241,8 +245,6 @@ def get_current_status():
         "telemetry": latest_telemetry,
         "heartbeat": latest_heartbeat,
         "latest_event": _serialize_event(latest_event),
-        "settings": get_threshold_settings(get_settings()),
-        "lamp_control": lamp_service.get_lamp_control(),
     }
 
 

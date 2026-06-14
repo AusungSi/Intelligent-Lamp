@@ -3,10 +3,7 @@ import type {
   EventsResponse,
   HistoryResponse,
   LatestSummaryResponse,
-  LampControlState,
-  LampSettings,
   SessionResponse,
-  SettingsResponse,
   TodaySummaryResponse,
 } from '@/types/api'
 
@@ -51,30 +48,4 @@ export async function fetchLatestSummary(): Promise<LatestSummaryResponse> {
 
 export async function fetchTodaySummary(): Promise<TodaySummaryResponse> {
   return parseJson(await fetch(`${API_BASE}/api/summaries/today`))
-}
-
-export async function fetchSettings(): Promise<SettingsResponse> {
-  return parseJson(await fetch(`${API_BASE}/api/settings`))
-}
-
-export async function saveSettings(settings: LampSettings): Promise<SettingsResponse> {
-  return parseJson(
-    await fetch(`${API_BASE}/api/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    }),
-  )
-}
-
-export async function saveLampControl(
-  control: LampControlState,
-): Promise<{ ok: boolean; lamp_control?: LampControlState }> {
-  return parseJson(
-    await fetch(`${API_BASE}/api/lamp/control`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(control),
-    }),
-  )
 }

@@ -67,24 +67,6 @@ const updatedAtText = computed(() => dashboard.value?.lamp.updatedAt ?? '--')
               <span>当前模式</span>
               <strong>{{ dashboard.lamp.mode }}</strong>
             </div>
-            <div>
-              <span>色温</span>
-              <strong>{{ dashboard.lamp.colorTemperature }}K</strong>
-            </div>
-            <div>
-              <span>亮度</span>
-              <strong>{{ dashboard.lamp.brightness }}%</strong>
-            </div>
-          </div>
-
-          <div class="brightness-preview">
-            <div class="brightness-preview__label">
-              <span>台灯亮度</span>
-              <strong>{{ dashboard.lamp.brightness }}%</strong>
-            </div>
-            <div class="progress-track">
-              <span :style="{ width: `${dashboard.lamp.brightness}%` }"></span>
-            </div>
           </div>
 
           <p class="device-panel__footer">最后同步：{{ updatedAtText }}</p>

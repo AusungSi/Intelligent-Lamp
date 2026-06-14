@@ -1,4 +1,4 @@
-export type SensorKey = 'illumination' | 'humidity' | 'temperature' | 'distance' | 'brightness'
+export type SensorKey = 'illumination' | 'humidity' | 'temperature' | 'distance'
 
 export interface SensorReading {
   key: SensorKey
@@ -15,8 +15,6 @@ export interface LampState {
   room: string
   online: boolean
   mode: string
-  colorTemperature: number
-  brightness: number
   updatedAt: string
 }
 

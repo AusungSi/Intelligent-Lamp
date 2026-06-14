@@ -1,12 +1,3 @@
-import type { SceneMode } from '@/types/api'
-
-export const SCENE_MODE_LABEL: Record<SceneMode, string> = {
-  eye_care: '护眼模式',
-  reading: '阅读模式',
-  focus: '专注模式',
-  night: '夜间模式',
-}
-
 export const STUDY_STATE_LABEL: Record<string, string> = {
   studying: '学习中',
   warning: '异常提醒',

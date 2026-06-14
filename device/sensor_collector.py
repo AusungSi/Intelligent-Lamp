@@ -1,13 +1,11 @@
 """
-sensor_collector.py - ESP32-S3 sensor collector with active WiFi telemetry.
+ESP32-S3 sensor collector.
 
-Behavior:
-- AHT20 temperature and humidity sampling every 30s
-- BH1750 light sampling every 10s
-- VL53L0X distance sampling every 1s
-- Telemetry upload every 1s by default
-- Heartbeat upload every 5s by default
-- Immediate event upload on state changes
+Responsibilities:
+- Sample AHT20, BH1750 and VL53L0X at independent intervals.
+- Derive presence, distance, environment and study states.
+- Upload telemetry, heartbeat and state-change events to the Flask backend.
+- Attach the latest camera frame to behavior events when the backend returns event_id.
 """
 
 import time
@@ -19,22 +17,21 @@ except ImportError:
 
 from machine import Pin, SoftI2C
 
-from http_client import get_json, post_json
+import camera_service
+import lamp_controller
+from http_client import get_json, post_jpeg, post_json
 from net_utils import ensure_wifi, wifi_connected
 
-# ===========================
-# I2C Bus (shared by 3 sensors)
-# ===========================
+
 I2C_SCL = Pin(1)
 I2C_SDA = Pin(2)
 I2C_FREQ = 100000
 
-# ===========================
-# Sampling Intervals (seconds)
-# ===========================
 INTERVAL_TEMP_HUMID = 30
 INTERVAL_LIGHT = 10
 INTERVAL_DISTANCE = 1
+
+SNAPSHOT_EVENT_TYPES = ("distance_too_close", "presence_away")
 
 sensor_state = {
     "temperature": None,
@@ -47,7 +44,7 @@ sensor_state = {
     "distance_timestamp": 0,
     "presence_state": "unknown",
     "distance_level": "unknown",
-    "env_label": [],
+    "env_label": ["normal"],
     "study_state": "idle",
     "study_duration": 0,
     "session_started_at": 0,
@@ -61,18 +58,9 @@ runtime_config = {
     "temperature_high_c": 30,
     "humidity_high_percent": 75,
     "leave_grace_seconds": 15,
+    "snapshot_enabled": True,
+    "snapshot_event_types": list(SNAPSHOT_EVENT_TYPES),
 }
-
-_last_temp_read = 0
-_last_light_read = 0
-_last_distance_read = 0
-_last_telemetry_at = 0
-_last_heartbeat_at = 0
-_last_config_refresh_at = 0
-
-aht_sensor = None
-bh1750_sensor = None
-tof_sensor = None
 
 current_session = {
     "active": False,
@@ -91,6 +79,24 @@ last_flags = {
 device_config = {}
 current_ip = None
 
+_last_temp_read = 0
+_last_light_read = 0
+_last_distance_read = 0
+_last_telemetry_at = 0
+_last_heartbeat_at = 0
+_last_config_refresh_at = 0
+
+aht_sensor = None
+bh1750_sensor = None
+tof_sensor = None
+
+
+def _sleep_ms(ms):
+    try:
+        time.sleep_ms(ms)
+    except AttributeError:
+        time.sleep(ms / 1000)
+
 
 def connect_wifi(config):
     return ensure_wifi(config)
@@ -103,8 +109,7 @@ def init_sensors():
     print("I2C bus ready (SCL=GPIO1, SDA=GPIO2)")
 
     devices = i2c.scan()
-    dev_str = ",".join([hex(d) for d in devices])
-    print("I2C devices: [{}]".format(dev_str))
+    print("I2C devices: [{}]".format(",".join([hex(d) for d in devices])))
 
     if 0x38 in devices:
         try:
@@ -112,8 +117,8 @@ def init_sensors():
 
             aht_sensor = ahtx0.AHT20(i2c)
             print("AHT20 OK (0x38)")
-        except Exception as e:
-            print("AHT20 init failed:", e)
+        except Exception as exc:
+            print("AHT20 init failed:", exc)
     else:
         print("AHT20 (0x38) not found")
 
@@ -123,8 +128,8 @@ def init_sensors():
 
             bh1750_sensor = BH1750(0x23, i2c)
             print("BH1750 OK (0x23)")
-        except Exception as e:
-            print("BH1750 init failed:", e)
+        except Exception as exc:
+            print("BH1750 init failed:", exc)
     else:
         print("BH1750 (0x23) not found")
 
@@ -133,10 +138,13 @@ def init_sensors():
             import VL53L0X
 
             tof_sensor = VL53L0X.VL53L0X(i2c)
-            tof_sensor.start()
+            if hasattr(tof_sensor, "begin"):
+                tof_sensor.begin()
+            if hasattr(tof_sensor, "start"):
+                tof_sensor.start()
             print("VL53L0X OK (0x29)")
-        except Exception as e:
-            print("VL53L0X init failed:", e)
+        except Exception as exc:
+            print("VL53L0X init failed:", exc)
     else:
         print("VL53L0X (0x29) not found")
 
@@ -150,8 +158,8 @@ def read_temperature_humidity(now):
         sensor_state["temperature_timestamp"] = int(now)
         sensor_state["humidity_timestamp"] = int(now)
         return True
-    except Exception as e:
-        print("AHT20 read error:", e)
+    except Exception as exc:
+        print("AHT20 read error:", exc)
         return False
 
 
@@ -162,8 +170,8 @@ def read_light(now):
         sensor_state["lux"] = round(bh1750_sensor.measurement, 1)
         sensor_state["lux_timestamp"] = int(now)
         return True
-    except Exception as e:
-        print("BH1750 read error:", e)
+    except Exception as exc:
+        print("BH1750 read error:", exc)
         return False
 
 
@@ -171,14 +179,14 @@ def read_distance(now):
     if tof_sensor is None:
         return False
     try:
-        dist = tof_sensor.read()
-        if 0 < dist < 2000:
-            sensor_state["distance_mm"] = int(dist)
+        distance = tof_sensor.read()
+        if 0 < distance < 2000:
+            sensor_state["distance_mm"] = int(distance)
             sensor_state["distance_timestamp"] = int(now)
             return True
         return False
-    except Exception as e:
-        print("VL53L0X read error:", e)
+    except Exception as exc:
+        print("VL53L0X read error:", exc)
         return False
 
 
@@ -202,9 +210,8 @@ def classify_distance(distance_mm):
     if distance_mm is None:
         return "unknown", "unknown"
 
-    presence_mm = int(runtime_config.get("distance_presence_mm", 1200))
     warning_mm = int(runtime_config.get("distance_warning_mm", 350))
-
+    presence_mm = int(runtime_config.get("distance_presence_mm", 1200))
     if distance_mm <= warning_mm:
         return "present", "too_close"
     if distance_mm <= presence_mm:
@@ -214,7 +221,6 @@ def classify_distance(distance_mm):
 
 def build_env_label():
     labels = []
-
     lux = sensor_state["lux"]
     temperature = sensor_state["temperature"]
     humidity = sensor_state["humidity"]
@@ -229,6 +235,10 @@ def build_env_label():
     return labels or ["normal"]
 
 
+def _has_warning_state():
+    return sensor_state["distance_level"] == "too_close" or "normal" not in sensor_state["env_label"]
+
+
 def update_state_machine(now):
     presence_state, distance_level = classify_distance(sensor_state["distance_mm"])
     sensor_state["presence_state"] = presence_state
@@ -239,42 +249,37 @@ def update_state_machine(now):
         if not current_session["active"]:
             current_session["active"] = True
             current_session["started_at"] = int(now)
+            current_session["last_present_at"] = int(now)
             current_session["warning_count"] = 0
             current_session["leave_count"] = 0
+            sensor_state["session_started_at"] = current_session["started_at"]
+            sensor_state["study_duration"] = 0
             post_event("study_started", "info", "Study session started", now)
 
         current_session["last_present_at"] = int(now)
         sensor_state["session_started_at"] = current_session["started_at"]
         sensor_state["study_duration"] = int(now) - current_session["started_at"]
-    else:
+    elif current_session["active"] and current_session["last_present_at"]:
+        away_seconds = int(now) - current_session["last_present_at"]
         leave_grace_seconds = int(runtime_config.get("leave_grace_seconds", 15))
-        if current_session["active"] and current_session["last_present_at"]:
-            away_seconds = int(now) - current_session["last_present_at"]
-            if away_seconds >= leave_grace_seconds:
-                duration = sensor_state["study_duration"]
-                post_event(
-                    "study_finished",
-                    "info",
-                    "Study session finished",
-                    now,
-                    {"study_duration": duration},
-                )
-                current_session["active"] = False
-                current_session["started_at"] = 0
-                current_session["last_present_at"] = 0
-                sensor_state["session_started_at"] = 0
-                sensor_state["study_duration"] = 0
+        if away_seconds >= leave_grace_seconds:
+            duration = sensor_state["study_duration"]
+            post_event(
+                "study_finished",
+                "info",
+                "Study session finished",
+                now,
+                {"study_duration": duration},
+            )
+            current_session["active"] = False
+            current_session["started_at"] = 0
+            current_session["last_present_at"] = 0
+            sensor_state["session_started_at"] = 0
+            sensor_state["study_duration"] = 0
 
-    if not current_session["active"]:
-        if presence_state == "away":
-            sensor_state["study_state"] = "idle"
-        else:
-            sensor_state["study_state"] = "idle"
-    else:
-        if distance_level == "too_close" or "normal" not in sensor_state["env_label"]:
-            sensor_state["study_state"] = "warning"
-        else:
-            sensor_state["study_state"] = "studying"
+    sensor_state["study_state"] = "idle"
+    if current_session["active"]:
+        sensor_state["study_state"] = "warning" if _has_warning_state() else "studying"
 
     sensor_state["last_update_at"] = int(now)
     detect_flag_changes(now)
@@ -309,6 +314,42 @@ def detect_flag_changes(now):
         last_flags["env_label_key"] = env_label_key
 
 
+def _parse_event_id(status, body):
+    if status not in (200, 201) or not body:
+        return None
+    try:
+        payload = json.loads(body)
+        if payload.get("ok") is False:
+            return None
+        return payload.get("event_id")
+    except Exception:
+        return None
+
+
+def should_upload_snapshot(event_type):
+    if not runtime_config.get("snapshot_enabled", True):
+        return False
+    allowed = runtime_config.get("snapshot_event_types") or list(SNAPSHOT_EVENT_TYPES)
+    return event_type in allowed
+
+
+def upload_event_snapshot(event_id):
+    frame, _ = camera_service.get_latest_frame()
+    if not frame and camera_service.is_ready():
+        frame = camera_service.capture_frame()
+    if not frame:
+        print("Snapshot skipped: no camera frame")
+        return False
+
+    path = "/api/device/events/{}/snapshot".format(event_id)
+    status, _ = post_jpeg(device_config, path, frame)
+    if status in (200, 201, 204):
+        print("Snapshot uploaded for event:", event_id)
+        return True
+    print("Snapshot upload failed:", event_id, status)
+    return False
+
+
 def post_event(event_type, level, message, now, extra=None):
     payload = {
         "device_id": device_config["device_id"],
@@ -324,10 +365,15 @@ def post_event(event_type, level, message, now, extra=None):
         payload["extra"] = extra
 
     try:
-        status, _ = post_json(device_config, "/api/device/events", payload)
+        status, body = post_json(device_config, "/api/device/events", payload)
         print("Event uploaded:", event_type, status)
+        event_id = _parse_event_id(status, body)
+        if event_id and should_upload_snapshot(event_type):
+            upload_event_snapshot(event_id)
+        return event_id
     except Exception as exc:
         print("Event upload failed:", event_type, exc)
+        return None
 
 
 def telemetry_payload():
@@ -352,8 +398,7 @@ def telemetry_payload():
 
 
 def upload_telemetry(now):
-    payload = telemetry_payload()
-    status, _ = post_json(device_config, "/api/device/telemetry", payload)
+    status, _ = post_json(device_config, "/api/device/telemetry", telemetry_payload())
     print("Telemetry uploaded:", status)
     return status
 
@@ -371,13 +416,26 @@ def upload_heartbeat(now):
 
 
 def refresh_runtime_config(now):
-    global runtime_config
     response = get_json(device_config, "/api/device/config")
-    if response and "settings" in response:
-        runtime_config.update(response["settings"])
-        print("Runtime config updated:", json.dumps(runtime_config))
-    else:
+    if not response:
         print("Runtime config refresh skipped")
+        return
+
+    settings = response.get("settings") or {}
+    if settings:
+        runtime_config.update(settings)
+        print("Runtime config updated:", json.dumps(runtime_config))
+
+    lamp_control = response.get("lamp_control")
+    if lamp_control:
+        lamp_controller.apply_lamp_control(lamp_control)
+
+
+def _initial_read(now):
+    read_temperature_humidity(now)
+    read_light(now)
+    read_distance(now)
+    update_state_machine(now)
 
 
 def run(config):
@@ -390,14 +448,16 @@ def run(config):
         print("WiFi failed, halt.")
         return
 
+    lamp_controller.init_lamp(config)
     init_sensors()
 
-    now = time.time()
-    read_temperature_humidity(now)
-    read_light(now)
-    read_distance(now)
-    update_state_machine(now)
+    try:
+        refresh_runtime_config(time.time())
+    except Exception as exc:
+        print("Initial runtime config refresh failed:", exc)
 
+    now = time.time()
+    _initial_read(now)
     print("Initial data:", json.dumps(telemetry_payload()))
 
     while True:
@@ -437,7 +497,7 @@ def run(config):
                 except Exception as exc:
                     print("Runtime config refresh failed:", exc)
 
-            time.sleep_ms(100)
+            _sleep_ms(100)
         except Exception as exc:
             print("Collector loop error:", exc)
             time.sleep(1)

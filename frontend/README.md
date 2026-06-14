@@ -1,6 +1,6 @@
 # 米家台灯传感器中控台
 
-基于 Vue 3、TypeScript、Vite 搭建的网页端后台展示界面，通过 Flask 后端 API 展示光照、湿度、温度、距离、亮度等传感器指标。
+基于 Vue 3、TypeScript、Vite 搭建的网页端后台展示界面，通过 Flask 后端 API 展示光照、湿度、温度、距离等传感器指标。
 
 ## 启动
 
@@ -26,12 +26,10 @@ interface SensorDashboardPayload {
     room: string
     online: boolean
     mode: string
-    colorTemperature: number
-    brightness: number
     updatedAt: string
   }
   readings: Array<{
-    key: 'illumination' | 'humidity' | 'temperature' | 'distance' | 'brightness'
+    key: 'illumination' | 'humidity' | 'temperature' | 'distance'
     label: string
     value: number
     unit: string

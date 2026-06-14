@@ -39,29 +39,10 @@ export interface EventRecord {
   snapshot_url?: string | null
 }
 
-export interface LampSettings {
-  distance_warning_mm?: number
-  distance_presence_mm?: number
-  light_low_lux?: number
-  temperature_high_c?: number
-  humidity_high_percent?: number
-  leave_grace_seconds?: number
-}
-
-export interface LampControlState {
-  brightness: number
-  color_temperature: number
-  scene_mode: SceneMode
-}
-
-export type SceneMode = 'eye_care' | 'reading' | 'focus' | 'night'
-
 export interface CurrentStatusPayload {
   telemetry: TelemetryRecord | null
   heartbeat: HeartbeatRecord | null
   latest_event: EventRecord | null
-  settings: LampSettings
-  lamp_control?: LampControlState
 }
 
 export type CurrentStatusResponse = ApiEnvelope & CurrentStatusPayload
@@ -96,10 +77,6 @@ export interface EventsResponse extends ApiEnvelope {
 
 export interface HistoryResponse extends ApiEnvelope {
   items: TelemetryRecord[]
-}
-
-export interface SettingsResponse extends ApiEnvelope {
-  settings: LampSettings
 }
 
 export interface SessionResponse extends ApiEnvelope {

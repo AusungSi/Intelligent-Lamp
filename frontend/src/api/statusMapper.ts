@@ -1,10 +1,13 @@
-import { EVENT_TYPE_LABEL, SCENE_MODE_LABEL, STUDY_STATE_LABEL } from '@/constants/labels'
-import type { CurrentStatusPayload, EventRecord, LampSettings } from '@/types/api'
+import { EVENT_TYPE_LABEL, STUDY_STATE_LABEL } from '@/constants/labels'
+import type { CurrentStatusPayload, EventRecord } from '@/types/api'
 import type { SensorDashboardPayload, SensorKey, SensorReading, StatusOverview } from '@/types/sensor'
 
 const HEARTBEAT_ONLINE_SECONDS = 30
-const DEFAULT_LAMP_BRIGHTNESS = 68
-const DEFAULT_COLOR_TEMPERATURE = 4100
+const DEFAULT_THRESHOLDS = {
+  lightLowLux: 150,
+  humidityHighPercent: 75,
+  temperatureHighC: 30,
+}
 
 function formatTimestamp(timestamp?: number | null): string {
   if (!timestamp) {
@@ -44,37 +47,28 @@ function formatTrend(
   return `${sign}${delta.toFixed(precision)}`
 }
 
-function luxStatus(lux: number | null | undefined, settings: LampSettings): SensorReading['status'] {
+function luxStatus(lux: number | null | undefined): SensorReading['status'] {
   if (lux == null) {
     return 'normal'
   }
 
-  const threshold = settings.light_low_lux ?? 150
-  return lux < threshold ? 'low' : 'normal'
+  return lux < DEFAULT_THRESHOLDS.lightLowLux ? 'low' : 'normal'
 }
 
-function humidityStatus(
-  humidity: number | null | undefined,
-  settings: LampSettings,
-): SensorReading['status'] {
+function humidityStatus(humidity: number | null | undefined): SensorReading['status'] {
   if (humidity == null) {
     return 'normal'
   }
 
-  const threshold = settings.humidity_high_percent ?? 75
-  return humidity > threshold ? 'high' : 'normal'
+  return humidity > DEFAULT_THRESHOLDS.humidityHighPercent ? 'high' : 'normal'
 }
 
-function temperatureStatus(
-  temperature: number | null | undefined,
-  settings: LampSettings,
-): SensorReading['status'] {
+function temperatureStatus(temperature: number | null | undefined): SensorReading['status'] {
   if (temperature == null) {
     return 'normal'
   }
 
-  const threshold = settings.temperature_high_c ?? 30
-  return temperature > threshold ? 'high' : 'normal'
+  return temperature > DEFAULT_THRESHOLDS.temperatureHighC ? 'high' : 'normal'
 }
 
 function distanceStatus(distanceLevel?: string | null): SensorReading['status'] {
@@ -89,37 +83,28 @@ function distanceStatus(distanceLevel?: string | null): SensorReading['status'] 
   return 'normal'
 }
 
-function luxDescription(lux: number | null | undefined, settings: LampSettings): string {
+function luxDescription(lux: number | null | undefined): string {
   if (lux == null) {
     return '暂无光照数据'
   }
 
-  const threshold = settings.light_low_lux ?? 150
-  return lux < threshold ? '环境偏暗，建议提高亮度' : '光线充足，适合阅读'
+  return lux < DEFAULT_THRESHOLDS.lightLowLux ? '环境偏暗，建议提高亮度' : '光线充足，适合阅读'
 }
 
-function humidityDescription(
-  humidity: number | null | undefined,
-  settings: LampSettings,
-): string {
+function humidityDescription(humidity: number | null | undefined): string {
   if (humidity == null) {
     return '暂无湿度数据'
   }
 
-  const threshold = settings.humidity_high_percent ?? 75
-  return humidity > threshold ? '湿度偏高，注意通风' : '湿度舒适，维持当前模式'
+  return humidity > DEFAULT_THRESHOLDS.humidityHighPercent ? '湿度偏高，注意通风' : '湿度舒适，维持当前模式'
 }
 
-function temperatureDescription(
-  temperature: number | null | undefined,
-  settings: LampSettings,
-): string {
+function temperatureDescription(temperature: number | null | undefined): string {
   if (temperature == null) {
     return '暂无温度数据'
   }
 
-  const threshold = settings.temperature_high_c ?? 30
-  return temperature > threshold ? '温度偏高，注意散热' : '温度适中，无需调整'
+  return temperature > DEFAULT_THRESHOLDS.temperatureHighC ? '温度偏高，注意散热' : '温度适中，无需调整'
 }
 
 function distanceDescription(distanceLevel?: string | null): string {
@@ -191,7 +176,7 @@ function buildReadings(
   payload: CurrentStatusPayload,
   previousValues?: Partial<Record<SensorKey, number>>,
 ): SensorReading[] {
-  const { telemetry, settings, lamp_control } = payload
+  const { telemetry } = payload
   const lux = telemetry?.lux ?? null
   const humidity = telemetry?.humidity ?? null
   const temperature = telemetry?.temperature ?? null
@@ -204,27 +189,27 @@ function buildReadings(
       label: '环境光照',
       value: lux ?? 0,
       unit: 'lx',
-      status: luxStatus(lux, settings),
+      status: luxStatus(lux),
       trend: formatTrend(lux, previousValues?.illumination, 3),
-      description: luxDescription(lux, settings),
+      description: luxDescription(lux),
     },
     {
       key: 'humidity',
       label: '空气湿度',
       value: humidity ?? 0,
       unit: '%',
-      status: humidityStatus(humidity, settings),
+      status: humidityStatus(humidity),
       trend: formatTrend(humidity, previousValues?.humidity, 1),
-      description: humidityDescription(humidity, settings),
+      description: humidityDescription(humidity),
     },
     {
       key: 'temperature',
       label: '环境温度',
       value: temperature ?? 0,
       unit: '°C',
-      status: temperatureStatus(temperature, settings),
+      status: temperatureStatus(temperature),
       trend: formatTrend(temperature, previousValues?.temperature, 0.15),
-      description: temperatureDescription(temperature, settings),
+      description: temperatureDescription(temperature),
     },
     {
       key: 'distance',
@@ -235,15 +220,6 @@ function buildReadings(
       trend: formatTrend(distanceCm, previousValues?.distance, 0.8),
       description: distanceDescription(telemetry?.distance_level),
     },
-    {
-      key: 'brightness',
-      label: '灯光亮度',
-      value: lamp_control?.brightness ?? DEFAULT_LAMP_BRIGHTNESS,
-      unit: '%',
-      status: 'normal',
-      trend: '稳定',
-      description: `当前色温 ${lamp_control?.color_temperature ?? DEFAULT_COLOR_TEMPERATURE}K，${SCENE_MODE_LABEL[lamp_control?.scene_mode ?? 'eye_care'] ?? '护眼模式'}`,
-    },
   ]
 }
 
@@ -251,21 +227,16 @@ export function mapStatusToDashboard(
   payload: CurrentStatusPayload,
   previousValues?: Partial<Record<SensorKey, number>>,
 ): SensorDashboardPayload {
-  const { telemetry, heartbeat, lamp_control } = payload
+  const { telemetry, heartbeat } = payload
   const studyState = telemetry?.study_state ?? heartbeat?.study_state ?? 'idle'
   const updatedAt = formatTimestamp(telemetry?.timestamp ?? heartbeat?.timestamp)
-  const sceneLabel = lamp_control?.scene_mode
-    ? SCENE_MODE_LABEL[lamp_control.scene_mode]
-    : undefined
 
   return {
     lamp: {
       name: 'StudyPilot 学习台灯',
       room: '书房 · 小明',
       online: isDeviceOnline(heartbeat?.timestamp),
-      mode: sceneLabel ?? STUDY_STATE_LABEL[studyState] ?? '自适应护眼',
-      colorTemperature: lamp_control?.color_temperature ?? DEFAULT_COLOR_TEMPERATURE,
-      brightness: lamp_control?.brightness ?? DEFAULT_LAMP_BRIGHTNESS,
+      mode: STUDY_STATE_LABEL[studyState] ?? '待机',
       updatedAt,
     },
     overview: buildOverview(payload),

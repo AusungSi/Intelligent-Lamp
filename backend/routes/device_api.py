@@ -1,7 +1,6 @@
 from flask import Blueprint, current_app, request
 
-from backend.services import camera_store, lamp_service, telemetry_service
-from backend.services.db import get_threshold_settings, get_settings
+from backend.services import camera_store, telemetry_service
 from backend.utils.response import error, ok
 
 
@@ -68,11 +67,3 @@ def receive_camera_frame():
     return ok({"message": "frame stored"})
 
 
-@device_api.get("/config")
-def get_runtime_config():
-    return ok(
-        {
-            "settings": get_threshold_settings(get_settings()),
-            "lamp_control": lamp_service.get_lamp_control(),
-        }
-    )
