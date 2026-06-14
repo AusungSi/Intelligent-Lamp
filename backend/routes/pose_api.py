@@ -1,15 +1,31 @@
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 
 from backend.services import pose_service, telemetry_service
-from backend.utils.response import ok
+from backend.utils.response import error, ok
 
 
 pose_api = Blueprint("pose_api", __name__)
 
 
+def _device_auth_failed():
+    token = request.headers.get("X-Device-Token")
+    return token != current_app.config["DEVICE_TOKEN"]
+
+
 @pose_api.post("/analyze/latest-frame")
 def analyze_latest_frame():
     return ok({"pose": pose_service.analyze_latest_frame()}, 201)
+
+
+@pose_api.post("/result")
+def save_pose_result():
+    if _device_auth_failed():
+        return error("Unauthorized device token", 401)
+
+    payload = request.get_json(silent=True) or {}
+    if not payload.get("pose_state"):
+        return error("pose_state is required")
+    return ok({"pose": telemetry_service.save_pose_result(payload)}, 201)
 
 
 @pose_api.get("/latest")

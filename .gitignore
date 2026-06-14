@@ -18,6 +18,14 @@ backend/data/snapshots/*.jpg
 # Frontend local build/dependencies
 frontend/node_modules/
 frontend/dist/
+frontend/.npm-cache/
+
+# Local browser/debug artifacts
+.playwright-cli/
+output/playwright/
+
+# Local camera profile with private device IPs
+vision/camera_sources.json
 
 # IDE
 .vscode/

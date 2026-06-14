@@ -13,6 +13,7 @@ export async function loadCurrentStatus(): Promise<CurrentStatusPayload> {
     telemetry: response.telemetry,
     heartbeat: response.heartbeat,
     latest_event: response.latest_event,
+    pose: response.pose,
   }
 }
 

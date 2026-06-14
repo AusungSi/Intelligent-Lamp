@@ -8,6 +8,7 @@ export const EVENT_TYPE_LABEL: Record<string, string> = {
   study_started: '开始学习',
   study_finished: '结束学习',
   presence_away: '离桌检测',
+  presence_present: '回到座位',
   distance_too_close: '坐姿异常',
   environment_changed: '环境异常',
 }

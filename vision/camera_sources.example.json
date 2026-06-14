@@ -1,0 +1,12 @@
+{
+  "phone": {
+    "source": "0",
+    "source_id": "phone-camera",
+    "capture_backend": "dshow"
+  },
+  "board": {
+    "source": "http://192.168.1.50/stream",
+    "source_id": "esp32-camera",
+    "capture_backend": "auto"
+  }
+}

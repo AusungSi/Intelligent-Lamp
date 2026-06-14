@@ -19,7 +19,7 @@ const activeTab = ref<AppTab>('monitor')
         <p class="eyebrow">StudyPilot Parent Console</p>
         <h1>StudyPilot 智能学习台灯家长端</h1>
         <p class="hero-card__desc">
-          入座监测、学习识别、异常提醒、离桌判定与数据复盘一体化管理平台。
+          集成在位监测、学习识别、异常提醒、离桌判定、实时视频流与数据复盘的一体化管理平台。
         </p>
       </div>
     </section>

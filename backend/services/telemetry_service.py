@@ -250,6 +250,7 @@ def get_current_status():
         "telemetry": latest_telemetry,
         "heartbeat": latest_heartbeat,
         "latest_event": _serialize_event(latest_event),
+        "pose": get_latest_pose(),
         "derived_state": state_engine.get_latest_derived_state(),
     }
 

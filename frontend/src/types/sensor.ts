@@ -18,7 +18,7 @@ export interface LampState {
   updatedAt: string
 }
 
-import type { EventRecord } from '@/types/api'
+import type { EventRecord, PoseRecord } from '@/types/api'
 
 export interface StatusOverview {
   studyState: string
@@ -33,4 +33,5 @@ export interface SensorDashboardPayload {
   lamp: LampState
   overview: StatusOverview
   readings: SensorReading[]
+  pose: PoseRecord | null
 }

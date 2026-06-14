@@ -39,10 +39,23 @@ export interface EventRecord {
   snapshot_url?: string | null
 }
 
+export interface PoseRecord {
+  id?: number
+  device_id?: string | null
+  timestamp?: number
+  provider?: string | null
+  pose_state?: string | null
+  confidence?: number | null
+  keypoints?: Array<Record<string, unknown>>
+  risk_labels?: string[]
+  raw?: Record<string, unknown>
+}
+
 export interface CurrentStatusPayload {
   telemetry: TelemetryRecord | null
   heartbeat: HeartbeatRecord | null
   latest_event: EventRecord | null
+  pose?: PoseRecord | null
 }
 
 export type CurrentStatusResponse = ApiEnvelope & CurrentStatusPayload
