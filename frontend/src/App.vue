@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import AppNav from '@/components/AppNav.vue'
 import EventTimeline from '@/components/EventTimeline.vue'
 import HistoryChartPanel from '@/components/HistoryChartPanel.vue'
+import LampBindingPanel from '@/components/LampBindingPanel.vue'
 import MonitorPanel from '@/components/MonitorPanel.vue'
 import StudySummaryPanel from '@/components/StudySummaryPanel.vue'
 import type { AppTab } from '@/types/navigation'
@@ -26,6 +27,7 @@ const activeTab = ref<AppTab>('monitor')
     <AppNav :active="activeTab" @change="activeTab = $event" />
 
     <MonitorPanel v-show="activeTab === 'monitor'" />
+    <LampBindingPanel v-show="activeTab === 'lamp'" />
     <StudySummaryPanel v-show="activeTab === 'summary'" />
     <EventTimeline v-show="activeTab === 'events'" />
     <HistoryChartPanel v-show="activeTab === 'history'" />

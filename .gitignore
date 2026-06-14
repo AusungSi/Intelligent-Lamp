@@ -9,6 +9,7 @@ device/secrets.json
 
 # Local backend environment and database
 backend/.env
+backend/data/
 backend/data/*.db
 backend/data/*.sqlite
 backend/data/*.sqlite3
@@ -22,5 +23,4 @@ frontend/dist/
 .vscode/
 .idea/
 
-# Temporary docs move state
-docs/
+

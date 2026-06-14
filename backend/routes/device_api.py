@@ -24,8 +24,8 @@ def receive_telemetry():
     payload = request.get_json(silent=True) or {}
     if not payload.get("device_id"):
         return error("device_id is required")
-    telemetry_service.save_telemetry(payload)
-    return ok({"message": "telemetry stored"}, 201)
+    result = telemetry_service.save_telemetry(payload)
+    return ok({"message": "telemetry stored", **result}, 201)
 
 
 @device_api.post("/events")
@@ -65,5 +65,27 @@ def receive_camera_frame():
         return error("empty frame body")
     camera_store.update_frame(device_id, frame, timestamp)
     return ok({"message": "frame stored"})
+
+
+@device_api.get("/config")
+def device_config():
+    return ok(
+        {
+            "settings": {
+                "distance_warning_mm": 350,
+                "distance_presence_mm": 1200,
+                "light_low_lux": 150,
+                "temperature_high_c": 30,
+                "humidity_high_percent": 75,
+                "leave_grace_seconds": 15,
+                "snapshot_enabled": True,
+                "snapshot_event_types": ["distance_too_close", "presence_away"],
+            },
+            "features": {
+                "backend_lamp_control": True,
+                "backend_pose_detection": True,
+            },
+        }
+    )
 
 

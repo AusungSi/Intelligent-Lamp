@@ -19,6 +19,10 @@ def _migrate_db(conn):
     if "has_snapshot" not in columns:
         conn.execute("ALTER TABLE events ADD COLUMN has_snapshot INTEGER NOT NULL DEFAULT 0")
 
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(lamp_states)").fetchall()}
+    if columns and "manual_override_until" not in columns:
+        conn.execute("ALTER TABLE lamp_states ADD COLUMN manual_override_until INTEGER DEFAULT 0")
+
 
 def init_db():
     with _connect() as conn:

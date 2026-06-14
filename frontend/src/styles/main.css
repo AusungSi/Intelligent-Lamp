@@ -660,6 +660,130 @@ h2 {
   margin-top: 10px;
 }
 
+.lamp-binding {
+  display: grid;
+  gap: 24px;
+}
+
+.lamp-binding__top,
+.lamp-binding__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lamp-binding__status,
+.lamp-binding__block {
+  border: 1px solid var(--mi-line);
+  border-radius: 20px;
+  background: #fcfcfa;
+}
+
+.lamp-binding__status {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+  padding: 16px 18px;
+}
+
+.lamp-binding__status span,
+.lamp-binding__block p,
+.lamp-binding__device span,
+.lamp-binding__log-item span {
+  color: var(--mi-gray);
+}
+
+.lamp-binding__qr {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  border: 1px solid rgba(255, 105, 0, 0.18);
+  border-radius: 20px;
+  background: #fff7ef;
+}
+
+.lamp-binding__qr img {
+  width: 160px;
+  height: 160px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.lamp-binding__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 18px;
+}
+
+.lamp-binding__block {
+  padding: 22px;
+}
+
+.lamp-binding__block h3 {
+  margin: 0 0 16px;
+}
+
+.lamp-binding__device-list,
+.lamp-binding__log {
+  display: grid;
+  gap: 12px;
+}
+
+.lamp-binding__device {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid var(--mi-line);
+  border-radius: 16px;
+  padding: 16px;
+  background: #fff;
+  color: var(--mi-black);
+  text-align: left;
+}
+
+.lamp-binding__device--active {
+  border-color: rgba(255, 105, 0, 0.32);
+  background: var(--mi-orange-soft);
+}
+
+.lamp-binding__device:disabled {
+  opacity: 0.55;
+}
+
+.lamp-binding__slider-row {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.lamp-binding__slider-row label {
+  display: grid;
+  gap: 8px;
+  color: var(--mi-gray);
+  font-size: 14px;
+}
+
+.lamp-binding__slider-row input {
+  width: 100%;
+}
+
+.lamp-binding__log-item {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 6px 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.lamp-binding__log-item p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .sensor-card--low .sensor-card__icon,
 .sensor-card--high .sensor-card__icon {
   color: #b45309;
@@ -683,6 +807,10 @@ h2 {
 
   .overview-banner {
     flex-direction: column;
+  }
+
+  .lamp-binding__grid {
+    grid-template-columns: 1fr;
   }
 
   .alert-strip time {

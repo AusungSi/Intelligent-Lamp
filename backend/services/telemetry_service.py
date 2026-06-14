@@ -2,6 +2,7 @@ import json
 import time
 
 from backend.services import snapshot_store, summary_service
+from backend.services import policy_engine, state_engine
 from backend.services.db import execute, fetch_all, fetch_one
 
 DEFAULT_SNAPSHOT_EVENT_TYPES = frozenset({"distance_too_close", "presence_away"})
@@ -41,6 +42,10 @@ def save_telemetry(payload):
         ),
     )
     sync_session_from_telemetry(payload)
+    derived_state = state_engine.derive_state(payload, get_latest_pose())
+    lamp_action = policy_engine.maybe_execute(derived_state, payload)
+    state_engine.save_derived_state(derived_state, lamp_action.get("action"))
+    return {"derived_state": derived_state, "lamp_action": lamp_action}
 
 
 def save_event(payload):
@@ -245,6 +250,7 @@ def get_current_status():
         "telemetry": latest_telemetry,
         "heartbeat": latest_heartbeat,
         "latest_event": _serialize_event(latest_event),
+        "derived_state": state_engine.get_latest_derived_state(),
     }
 
 
@@ -334,3 +340,56 @@ def get_today_summary():
         "total_warning_count": total_warnings,
         "total_leave_count": total_leaves,
     }
+
+
+def save_pose_result(payload):
+    record_id = execute(
+        """
+        INSERT INTO pose_records (
+            device_id, timestamp, provider, pose_state, confidence,
+            keypoints_json, risk_labels_json, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            payload.get("device_id"),
+            payload.get("timestamp", int(time.time())),
+            payload.get("provider", "backend_latest_frame"),
+            payload.get("pose_state", "unknown"),
+            payload.get("confidence", 0),
+            json.dumps(payload.get("keypoints") or []),
+            json.dumps(payload.get("risk_labels") or []),
+            json.dumps(payload.get("raw") or {}),
+        ),
+    )
+    return fetch_one("SELECT * FROM pose_records WHERE id = ?", (record_id,))
+
+
+def get_latest_pose():
+    row = fetch_one("SELECT * FROM pose_records ORDER BY id DESC LIMIT 1")
+    if row:
+        row["keypoints"] = json.loads(row["keypoints_json"]) if row.get("keypoints_json") else []
+        row["risk_labels"] = json.loads(row["risk_labels_json"]) if row.get("risk_labels_json") else []
+        row["raw"] = json.loads(row["raw_json"]) if row.get("raw_json") else {}
+        row.pop("keypoints_json", None)
+        row.pop("risk_labels_json", None)
+        row.pop("raw_json", None)
+    return row
+
+
+def get_pose_history(limit=100):
+    rows = fetch_all(
+        """
+        SELECT * FROM pose_records ORDER BY id DESC LIMIT ?
+        """,
+        (limit,),
+    )
+    items = []
+    for row in rows:
+        row["keypoints"] = json.loads(row["keypoints_json"]) if row.get("keypoints_json") else []
+        row["risk_labels"] = json.loads(row["risk_labels_json"]) if row.get("risk_labels_json") else []
+        row["raw"] = json.loads(row["raw_json"]) if row.get("raw_json") else {}
+        row.pop("keypoints_json", None)
+        row.pop("risk_labels_json", None)
+        row.pop("raw_json", None)
+        items.append(row)
+    return list(reversed(items))
