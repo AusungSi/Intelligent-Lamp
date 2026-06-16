@@ -14,6 +14,7 @@ export async function loadCurrentStatus(): Promise<CurrentStatusPayload> {
     heartbeat: response.heartbeat,
     latest_event: response.latest_event,
     pose: response.pose,
+    derived_state: response.derived_state,
   }
 }
 

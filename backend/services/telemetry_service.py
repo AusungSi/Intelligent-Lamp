@@ -6,13 +6,67 @@ from backend.services import policy_engine, state_engine
 from backend.services.db import execute, fetch_all, fetch_one
 
 DEFAULT_SNAPSHOT_EVENT_TYPES = frozenset({"distance_too_close", "presence_away"})
+MAX_DEVICE_CLOCK_DRIFT_SECONDS = 24 * 60 * 60
+LEAVE_GRACE_SECONDS = 15
+POSTURE_WINDOW_SECONDS = 10
+POSTURE_MIN_ABNORMAL_RATIO = 0.6
+POSTURE_MIN_SAMPLES = 5
+POSTURE_EVENT_COOLDOWN_SECONDS = 60
+POSTURE_EVENT_RULES = {
+    "reading_abnormal": {
+        "event_type": "posture_reading_abnormal",
+        "message": "看书姿势不正确",
+    },
+    "computer_abnormal": {
+        "event_type": "posture_computer_abnormal",
+        "message": "使用电脑姿势不正确",
+    },
+}
 
 
 def _snapshot_event_types():
     return DEFAULT_SNAPSHOT_EVENT_TYPES
 
 
+def _normalize_device_timestamps(payload, timestamp_fields):
+    normalized = dict(payload)
+    now = int(time.time())
+    raw_timestamp = normalized.get("timestamp")
+
+    try:
+        timestamp = int(raw_timestamp)
+    except (TypeError, ValueError):
+        normalized["timestamp"] = now
+        return normalized
+
+    if abs(now - timestamp) <= MAX_DEVICE_CLOCK_DRIFT_SECONDS:
+        return normalized
+
+    offset = now - timestamp
+    for field in timestamp_fields:
+        value = normalized.get(field)
+        if value in (None, 0):
+            continue
+        try:
+            normalized[field] = int(value) + offset
+        except (TypeError, ValueError):
+            normalized[field] = now
+    normalized["timestamp"] = now
+    return normalized
+
+
 def save_telemetry(payload):
+    payload = _normalize_device_timestamps(
+        payload,
+        (
+            "timestamp",
+            "temperature_timestamp",
+            "humidity_timestamp",
+            "lux_timestamp",
+            "distance_timestamp",
+            "session_started_at",
+        ),
+    )
     env_label = payload.get("env_label") or []
     execute(
         """
@@ -41,14 +95,16 @@ def save_telemetry(payload):
             payload.get("session_started_at", 0),
         ),
     )
-    sync_session_from_telemetry(payload)
     derived_state = state_engine.derive_state(payload, get_latest_pose())
+    sync_session_from_derived(payload, derived_state)
     lamp_action = policy_engine.maybe_execute(derived_state, payload)
     state_engine.save_derived_state(derived_state, lamp_action.get("action"))
+    maybe_emit_posture_warning(derived_state)
     return {"derived_state": derived_state, "lamp_action": lamp_action}
 
 
 def save_event(payload):
+    payload = _normalize_device_timestamps(payload, ("timestamp",))
     event_id = execute(
         """
         INSERT INTO events (
@@ -91,6 +147,7 @@ def attach_event_snapshot(event_id, jpeg_bytes):
 
 
 def save_heartbeat(payload):
+    payload = _normalize_device_timestamps(payload, ("timestamp",))
     execute(
         """
         INSERT INTO heartbeats (device_id, timestamp, ip, study_state)
@@ -105,55 +162,27 @@ def save_heartbeat(payload):
     )
 
 
-def sync_session_from_telemetry(payload):
-    device_id = payload.get("device_id")
+def sync_session_from_derived(payload, derived_state):
+    device_id = derived_state.get("device_id") or payload.get("device_id")
     active = get_active_session(device_id)
-    session_started_at = payload.get("session_started_at") or 0
-    study_state = payload.get("study_state")
-    study_duration = int(payload.get("study_duration") or 0)
+    presence_state = derived_state.get("presence_state")
+    timestamp = int(derived_state.get("timestamp") or payload.get("timestamp") or time.time())
 
-    if session_started_at and active is None:
-        execute(
-            """
-            INSERT INTO study_sessions (device_id, started_at, status)
-            VALUES (?, ?, 'active')
-            """,
-            (device_id, session_started_at),
-        )
-        active = get_active_session(device_id)
-
-    if active and study_state == "idle" and study_duration == 0 and payload.get("presence_state") == "away":
-        close_active_session(device_id, payload.get("timestamp", int(time.time())))
-
-
-def sync_session_from_event(payload):
-    device_id = payload.get("device_id")
-    event_type = payload.get("event_type")
-    active = get_active_session(device_id)
-
-    if event_type == "study_started" and active is None:
-        execute(
-            """
-            INSERT INTO study_sessions (device_id, started_at, status)
-            VALUES (?, ?, 'active')
-            """,
-            (device_id, payload.get("timestamp", int(time.time()))),
-        )
+    if presence_state == "present":
+        if active is None:
+            execute(
+                """
+                INSERT INTO study_sessions (device_id, started_at, status)
+                VALUES (?, ?, 'active')
+                """,
+                (device_id, timestamp),
+            )
         return
 
-    if active is None:
+    if active is None or presence_state != "away":
         return
 
-    if event_type in ("distance_too_close", "environment_changed"):
-        execute(
-            """
-            UPDATE study_sessions
-            SET warning_count = warning_count + 1, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (active["id"],),
-        )
-    elif event_type == "presence_away":
+    if _latest_derived_presence(device_id) == "present":
         execute(
             """
             UPDATE study_sessions
@@ -162,12 +191,111 @@ def sync_session_from_event(payload):
             """,
             (active["id"],),
         )
-    elif event_type == "study_finished":
-        close_active_session(
-            device_id,
-            payload.get("timestamp", int(time.time())),
-            int((payload.get("extra") or {}).get("study_duration", 0)),
+
+    last_present_at = _latest_present_timestamp(device_id)
+    if last_present_at is None:
+        last_present_at = int(active.get("started_at") or timestamp)
+    if timestamp - last_present_at >= LEAVE_GRACE_SECONDS:
+        close_active_session(device_id, timestamp)
+
+
+def sync_session_from_event(payload):
+    device_id = payload.get("device_id")
+    event_type = payload.get("event_type")
+    active = get_active_session(device_id)
+
+    if active is None:
+        return
+
+    if event_type in (
+        "distance_too_close",
+        "environment_changed",
+        "posture_reading_abnormal",
+        "posture_computer_abnormal",
+    ):
+        execute(
+            """
+            UPDATE study_sessions
+            SET warning_count = warning_count + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (active["id"],),
         )
+
+
+def maybe_emit_posture_warning(derived_state):
+    device_id = derived_state.get("device_id")
+    timestamp = int(derived_state.get("timestamp") or time.time())
+    pose_state = derived_state.get("pose_state")
+    rule = POSTURE_EVENT_RULES.get(pose_state)
+    if not device_id or not rule:
+        return None
+
+    stats = _posture_window_stats(device_id, pose_state, timestamp)
+    if stats["total"] < POSTURE_MIN_SAMPLES or stats["ratio"] < POSTURE_MIN_ABNORMAL_RATIO:
+        return None
+
+    event_type = rule["event_type"]
+    if _recent_event_exists(device_id, event_type, timestamp, POSTURE_EVENT_COOLDOWN_SECONDS):
+        return None
+
+    event = {
+        "device_id": device_id,
+        "timestamp": timestamp,
+        "event_type": event_type,
+        "level": "warning",
+        "message": rule["message"],
+        "presence_state": derived_state.get("presence_state"),
+        "distance_level": derived_state.get("distance_level"),
+        "study_state": derived_state.get("study_state"),
+        "extra": {
+            "pose_state": pose_state,
+            "window_seconds": POSTURE_WINDOW_SECONDS,
+            "sample_count": stats["total"],
+            "abnormal_count": stats["abnormal"],
+            "abnormal_ratio": round(stats["ratio"], 3),
+        },
+    }
+    return save_event(event)
+
+
+def _posture_window_stats(device_id, pose_state, timestamp):
+    rows = fetch_all(
+        """
+        SELECT pose_state FROM derived_states
+        WHERE device_id = ?
+          AND timestamp >= ?
+          AND timestamp <= ?
+          AND presence_state = 'present'
+          AND pose_state IN (
+            'calibration_normal',
+            'computer_normal',
+            'computer_abnormal',
+            'reading_normal',
+            'reading_abnormal'
+          )
+        ORDER BY timestamp DESC
+        """,
+        (device_id, timestamp - POSTURE_WINDOW_SECONDS + 1, timestamp),
+    )
+    total = len(rows)
+    abnormal = sum(1 for row in rows if row.get("pose_state") == pose_state)
+    ratio = abnormal / total if total else 0
+    return {"total": total, "abnormal": abnormal, "ratio": ratio}
+
+
+def _recent_event_exists(device_id, event_type, timestamp, cooldown_seconds):
+    row = fetch_one(
+        """
+        SELECT id FROM events
+        WHERE device_id = ?
+          AND event_type = ?
+          AND timestamp >= ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (device_id, event_type, timestamp - cooldown_seconds),
+    )
+    return row is not None
 
 
 def get_active_session(device_id):
@@ -180,6 +308,34 @@ def get_active_session(device_id):
         """,
         (device_id,),
     )
+
+
+def _latest_derived_presence(device_id):
+    if not device_id:
+        return None
+    row = fetch_one(
+        """
+        SELECT presence_state FROM derived_states
+        WHERE device_id = ?
+        ORDER BY id DESC LIMIT 1
+        """,
+        (device_id,),
+    )
+    return row.get("presence_state") if row else None
+
+
+def _latest_present_timestamp(device_id):
+    if not device_id:
+        return None
+    row = fetch_one(
+        """
+        SELECT timestamp FROM derived_states
+        WHERE device_id = ? AND presence_state = 'present'
+        ORDER BY id DESC LIMIT 1
+        """,
+        (device_id,),
+    )
+    return int(row["timestamp"]) if row and row.get("timestamp") else None
 
 
 def close_active_session(device_id, ended_at, duration_seconds=None):
@@ -310,6 +466,8 @@ def get_current_session():
         SELECT * FROM study_sessions WHERE status = 'active' ORDER BY id DESC LIMIT 1
         """
     )
+    if session and session.get("started_at"):
+        session["duration_seconds"] = max(0, int(time.time()) - int(session["started_at"]))
     return session
 
 

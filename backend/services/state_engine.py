@@ -12,27 +12,43 @@ DEFAULT_THRESHOLDS = {
     "humidity_high_percent": 75,
 }
 
+POSE_PRESENT_STATES = frozenset(
+    {
+        "calibration_normal",
+        "computer_normal",
+        "computer_abnormal",
+        "reading_normal",
+        "reading_abnormal",
+    }
+)
+POSE_ABSENT_STATES = frozenset({"absent", "ignore"})
+POSE_WARNING_STATES = frozenset({"computer_abnormal", "reading_abnormal"})
+POSE_STALE_SECONDS = 5
+
 
 def derive_state(payload, pose=None):
     now = int(payload.get("timestamp") or time.time())
-    presence_state, distance_level = _classify_distance(payload.get("distance_mm"))
+    _, distance_level = _classify_distance(payload.get("distance_mm"))
     env_labels = _classify_environment(payload)
     pose_state = (pose or {}).get("pose_state") or "unknown"
+    presence_state = _classify_pose_presence(pose, now)
 
     study_state = "idle"
     if presence_state == "present":
         study_state = "warning" if distance_level == "too_close" or env_labels != ["normal"] else "studying"
-    if pose_state not in ("unknown", "normal", "low_confidence") and presence_state == "present":
+    elif presence_state == "unknown":
+        study_state = "unknown"
+    if pose_state in POSE_WARNING_STATES and presence_state == "present":
         study_state = "warning"
 
     return {
         "device_id": payload.get("device_id"),
         "timestamp": now,
-        "presence_state": payload.get("presence_state") or presence_state,
+        "presence_state": presence_state,
         "distance_level": payload.get("distance_level") or distance_level,
         "env_labels": payload.get("env_label") or env_labels,
         "pose_state": pose_state,
-        "study_state": payload.get("study_state") or study_state,
+        "study_state": study_state,
     }
 
 
@@ -78,6 +94,25 @@ def _classify_distance(distance_mm):
     if distance <= DEFAULT_THRESHOLDS["distance_presence_mm"]:
         return "present", "normal"
     return "away", "far"
+
+
+def _classify_pose_presence(pose, now):
+    if not pose:
+        return "unknown"
+
+    try:
+        pose_timestamp = int(pose.get("timestamp") or 0)
+    except (TypeError, ValueError):
+        pose_timestamp = 0
+    if not pose_timestamp or abs(now - pose_timestamp) > POSE_STALE_SECONDS:
+        return "unknown"
+
+    pose_state = pose.get("pose_state")
+    if pose_state in POSE_ABSENT_STATES:
+        return "away"
+    if pose_state in POSE_PRESENT_STATES:
+        return "present"
+    return "unknown"
 
 
 def _classify_environment(payload):

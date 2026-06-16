@@ -33,20 +33,24 @@ def evaluate(derived_state, telemetry=None, policy=None):
     if presence != "present":
         return {"type": "none", "reason": "presence_unknown"}
 
-    brightness = int(config.get("normal_brightness", 55))
-    if "too_dark" in env_labels or (lux is not None and float(lux) < float(config.get("too_dark_lux", 150))):
-        brightness = int(config.get("too_dark_brightness", 80))
-
     color_temperature = int(config.get("day_study_color_temperature", 4300))
     if study_state == "idle":
         color_temperature = int(config.get("rest_color_temperature", 3000))
 
+    light_action = _evaluate_present_lighting(lux, env_labels, config)
+    if light_action.get("power") is False:
+        return {
+            "type": "set_light",
+            "power": False,
+            "reason": light_action["reason"],
+        }
+
     return {
         "type": "set_light",
         "power": True,
-        "brightness": brightness,
+        "brightness": light_action["brightness"],
         "color_temperature": color_temperature,
-        "reason": "present_study_lighting",
+        "reason": light_action["reason"],
     }
 
 
@@ -90,6 +94,37 @@ def _same_as_current(action, state):
         if key in action and action[key] != state.get(key):
             return False
     return True
+
+
+def _evaluate_present_lighting(lux, env_labels, config):
+    if lux is None:
+        brightness = int(config.get("normal_brightness", 55))
+        if "too_dark" in env_labels:
+            brightness = int(config.get("too_dark_brightness", 80))
+        return {"power": True, "brightness": brightness, "reason": "present_study_lighting"}
+
+    lux_value = float(lux)
+    on_lux = float(config.get("light_on_lux", 200))
+    off_lux = float(config.get("light_off_lux", 1000))
+    min_brightness = int(config.get("min_auto_brightness", config.get("dim_brightness", 20)))
+    max_brightness = int(config.get("max_auto_brightness", config.get("too_dark_brightness", 80)))
+
+    if off_lux <= on_lux:
+        off_lux = on_lux + 1
+
+    if lux_value > off_lux:
+        return {"power": False, "reason": "ambient_bright_off"}
+
+    if lux_value <= on_lux:
+        return {"power": True, "brightness": max_brightness, "reason": "ambient_dark_full"}
+
+    ratio = (lux_value - on_lux) / (off_lux - on_lux)
+    brightness = round(max_brightness - ratio * (max_brightness - min_brightness))
+    return {
+        "power": True,
+        "brightness": int(max(min_brightness, min(max_brightness, brightness))),
+        "reason": "ambient_lux_curve",
+    }
 
 
 def _estimate_away_seconds(device_id, now):

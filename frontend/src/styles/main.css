@@ -33,6 +33,15 @@ button {
   color: var(--mi-orange);
   background: var(--mi-orange-soft);
   font: inherit;
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px) scale(0.98);
 }
 
 .app-shell {
@@ -523,6 +532,10 @@ h2 {
   margin-top: 22px;
 }
 
+.today-stats {
+  grid-template-columns: 1fr;
+}
+
 .summary-card__stats div,
 .today-stats div {
   padding: 16px;
@@ -830,6 +843,16 @@ h2 {
 
 .lamp-binding__slider-row input {
   width: 100%;
+}
+
+.lamp-binding__mode-button--active {
+  color: #fff;
+  background: #d95600;
+  box-shadow: 0 10px 24px rgba(217, 86, 0, 0.22);
+}
+
+.lamp-binding__mode-button--active:not(:disabled):hover {
+  background: #c74f00;
 }
 
 .lamp-binding__log-item {

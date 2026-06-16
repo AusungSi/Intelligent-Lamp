@@ -85,10 +85,6 @@ function formatClock(timestamp?: number | null): string {
             <span>离桌次数</span>
             <strong>{{ todaySummary.total_leave_count }} 次</strong>
           </div>
-          <div>
-            <span>会话数量</span>
-            <strong>{{ todaySummary.sessions.length }} 次</strong>
-          </div>
         </div>
 
         <div class="session-list">

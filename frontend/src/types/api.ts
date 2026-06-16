@@ -51,11 +51,24 @@ export interface PoseRecord {
   raw?: Record<string, unknown>
 }
 
+export interface DerivedStateRecord {
+  id?: number
+  device_id?: string
+  timestamp?: number
+  presence_state?: string | null
+  distance_level?: string | null
+  env_labels?: string[] | null
+  pose_state?: string | null
+  study_state?: string | null
+  recommended_action?: Record<string, unknown>
+}
+
 export interface CurrentStatusPayload {
   telemetry: TelemetryRecord | null
   heartbeat: HeartbeatRecord | null
   latest_event: EventRecord | null
   pose?: PoseRecord | null
+  derived_state?: DerivedStateRecord | null
 }
 
 export type CurrentStatusResponse = ApiEnvelope & CurrentStatusPayload
