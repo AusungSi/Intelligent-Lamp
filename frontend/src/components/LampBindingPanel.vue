@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 
 import { useLampBinding } from '@/composables/useLampBinding'
 
@@ -22,14 +22,157 @@ const {
 
 const currentState = computed(() => lamp.value?.state)
 const currentBinding = computed(() => lamp.value?.binding)
+const currentMode = computed(() => currentState.value?.mode)
+const localBrightness = ref(50)
+const localColorTemperature = ref(4000)
+const brightnessEditing = ref(false)
+const colorTemperatureEditing = ref(false)
+
+const SLIDER_CONTROL_INTERVAL_MS = 250
+const SLIDER_EDITING_RELEASE_MS = 600
+let brightnessTimer: ReturnType<typeof setTimeout> | null = null
+let colorTemperatureTimer: ReturnType<typeof setTimeout> | null = null
+let brightnessEditingTimer: ReturnType<typeof setTimeout> | null = null
+let colorTemperatureEditingTimer: ReturnType<typeof setTimeout> | null = null
+let lastBrightnessSentAt = 0
+let lastColorTemperatureSentAt = 0
+let lastBrightnessValue: number | null = null
+let lastColorTemperatureValue: number | null = null
+
+watch(
+  () => currentState.value?.brightness,
+  (brightness) => {
+    if (brightness != null && !brightnessEditing.value) {
+      localBrightness.value = brightness
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => currentState.value?.color_temperature,
+  (colorTemperature) => {
+    if (colorTemperature != null && !colorTemperatureEditing.value) {
+      localColorTemperature.value = colorTemperature
+    }
+  },
+  { immediate: true },
+)
+
+function isModeSelected(mode: string) {
+  return currentMode.value === mode
+}
 
 function onBrightnessChange(event: Event) {
-  control({ brightness: Number((event.target as HTMLInputElement).value) })
+  releaseBrightnessEditingSoon()
+  sendBrightness(Number((event.target as HTMLInputElement).value))
 }
 
 function onColorTemperatureChange(event: Event) {
-  control({ color_temperature: Number((event.target as HTMLInputElement).value) })
+  releaseColorTemperatureEditingSoon()
+  sendColorTemperature(Number((event.target as HTMLInputElement).value))
 }
+
+function onBrightnessInput(event: Event) {
+  scheduleBrightness(Number((event.target as HTMLInputElement).value))
+}
+
+function onColorTemperatureInput(event: Event) {
+  scheduleColorTemperature(Number((event.target as HTMLInputElement).value))
+}
+
+function scheduleBrightness(value: number) {
+  brightnessEditing.value = true
+  localBrightness.value = value
+  const delay = Math.max(0, SLIDER_CONTROL_INTERVAL_MS - (Date.now() - lastBrightnessSentAt))
+  if (delay === 0) {
+    sendBrightness(value)
+    return
+  }
+  if (brightnessTimer) {
+    clearTimeout(brightnessTimer)
+  }
+  brightnessTimer = setTimeout(() => sendBrightness(value), delay)
+}
+
+function scheduleColorTemperature(value: number) {
+  colorTemperatureEditing.value = true
+  localColorTemperature.value = value
+  const delay = Math.max(0, SLIDER_CONTROL_INTERVAL_MS - (Date.now() - lastColorTemperatureSentAt))
+  if (delay === 0) {
+    sendColorTemperature(value)
+    return
+  }
+  if (colorTemperatureTimer) {
+    clearTimeout(colorTemperatureTimer)
+  }
+  colorTemperatureTimer = setTimeout(() => sendColorTemperature(value), delay)
+}
+
+function sendBrightness(value: number) {
+  if (brightnessTimer) {
+    clearTimeout(brightnessTimer)
+    brightnessTimer = null
+  }
+  if (lastBrightnessValue === value) {
+    return
+  }
+  localBrightness.value = value
+  lastBrightnessValue = value
+  lastBrightnessSentAt = Date.now()
+  void control({ brightness: value })
+}
+
+function sendColorTemperature(value: number) {
+  if (colorTemperatureTimer) {
+    clearTimeout(colorTemperatureTimer)
+    colorTemperatureTimer = null
+  }
+  if (lastColorTemperatureValue === value) {
+    return
+  }
+  localColorTemperature.value = value
+  lastColorTemperatureValue = value
+  lastColorTemperatureSentAt = Date.now()
+  void control({ color_temperature: value })
+}
+
+function releaseBrightnessEditingSoon() {
+  if (brightnessEditingTimer) {
+    clearTimeout(brightnessEditingTimer)
+  }
+  brightnessEditingTimer = setTimeout(() => {
+    brightnessEditing.value = false
+    if (currentState.value?.brightness != null) {
+      localBrightness.value = currentState.value.brightness
+    }
+  }, SLIDER_EDITING_RELEASE_MS)
+}
+
+function releaseColorTemperatureEditingSoon() {
+  if (colorTemperatureEditingTimer) {
+    clearTimeout(colorTemperatureEditingTimer)
+  }
+  colorTemperatureEditingTimer = setTimeout(() => {
+    colorTemperatureEditing.value = false
+    if (currentState.value?.color_temperature != null) {
+      localColorTemperature.value = currentState.value.color_temperature
+    }
+  }, SLIDER_EDITING_RELEASE_MS)
+}
+
+onUnmounted(() => {
+  for (const timer of [
+    brightnessTimer,
+    colorTemperatureTimer,
+    brightnessEditingTimer,
+    colorTemperatureEditingTimer,
+  ]) {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+})
 </script>
 
 <template>
@@ -95,8 +238,8 @@ function onColorTemperatureChange(event: Event) {
             <h3>当前绑定</h3>
             <template v-if="currentBinding && currentState">
               <p>{{ currentBinding.name }} / {{ currentBinding.model }}</p>
-              <p>亮度：{{ currentState.brightness ?? '--' }}</p>
-              <p>色温：{{ currentState.color_temperature ?? '--' }}</p>
+              <p>亮度：{{ localBrightness }}</p>
+              <p>色温：{{ localColorTemperature }}</p>
               <p>模式：{{ currentState.mode }}</p>
               <div class="lamp-binding__slider-row">
                 <label>
@@ -105,7 +248,8 @@ function onColorTemperatureChange(event: Event) {
                     type="range"
                     min="1"
                     max="100"
-                    :value="currentState.brightness ?? 50"
+                    :value="localBrightness"
+                    @input="onBrightnessInput"
                     @change="onBrightnessChange"
                   />
                 </label>
@@ -116,7 +260,8 @@ function onColorTemperatureChange(event: Event) {
                     min="2700"
                     max="6500"
                     step="100"
-                    :value="currentState.color_temperature ?? 4000"
+                    :value="localColorTemperature"
+                    @input="onColorTemperatureInput"
                     @change="onColorTemperatureChange"
                   />
                 </label>
@@ -124,8 +269,24 @@ function onColorTemperatureChange(event: Event) {
               <div class="lamp-binding__actions">
                 <button type="button" :disabled="busy" @click="control({ power: true })">开灯</button>
                 <button type="button" :disabled="busy" @click="control({ power: false })">关灯</button>
-                <button type="button" :disabled="busy" @click="changeMode('auto')">自动</button>
-                <button type="button" :disabled="busy" @click="changeMode('manual_override')">手动覆盖</button>
+                <button
+                  type="button"
+                  class="lamp-binding__mode-button"
+                  :class="{ 'lamp-binding__mode-button--active': isModeSelected('auto') }"
+                  :disabled="busy"
+                  @click="changeMode('auto')"
+                >
+                  自动
+                </button>
+                <button
+                  type="button"
+                  class="lamp-binding__mode-button"
+                  :class="{ 'lamp-binding__mode-button--active': isModeSelected('manual_override') }"
+                  :disabled="busy"
+                  @click="changeMode('manual_override')"
+                >
+                  手动覆盖
+                </button>
               </div>
             </template>
             <p v-else>尚未绑定台灯。</p>

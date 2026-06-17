@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import SensorCard from '@/components/SensorCard.vue'
 import { useSensorDashboard } from '@/composables/useSensorDashboard'
-import { formatEventTime, getEventTypeLabel } from '@/api/statusMapper'
+import { formatEventTime, getEventMessage, getEventTypeLabel } from '@/api/statusMapper'
 
 const { dashboard, loading, error } = useSensorDashboard()
 
@@ -84,7 +84,7 @@ onUnmounted(() => {
       <section v-if="dashboard.overview.latestEvent" class="alert-strip">
         <span class="alert-strip__badge">最新事件</span>
         <strong>{{ getEventTypeLabel(dashboard.overview.latestEvent.event_type) }}</strong>
-        <span>{{ dashboard.overview.latestEvent.message }}</span>
+        <span>{{ getEventMessage(dashboard.overview.latestEvent) }}</span>
         <time>{{ formatEventTime(dashboard.overview.latestEvent.timestamp) }}</time>
       </section>
 
@@ -152,7 +152,6 @@ onUnmounted(() => {
               <p class="eyebrow">Realtime</p>
               <h2>传感器实时概览</h2>
             </div>
-            <button type="button" disabled>接口轮询 · 2s</button>
           </div>
 
           <div class="sensor-grid">

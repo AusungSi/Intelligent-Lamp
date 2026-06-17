@@ -11,4 +11,6 @@ export const EVENT_TYPE_LABEL: Record<string, string> = {
   presence_present: '回到座位',
   distance_too_close: '坐姿异常',
   environment_changed: '环境异常',
+  posture_reading_abnormal: '看书姿势不正确',
+  posture_computer_abnormal: '使用电脑姿势不正确',
 }

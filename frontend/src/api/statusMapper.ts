@@ -87,10 +87,37 @@ function eventLevelLabel(level?: string | null): string {
   return level === 'warning' ? '告警' : '信息'
 }
 
+function getEnvironmentEventMessage(event: EventRecord): string | null {
+  if (event.event_type !== 'environment_changed') {
+    return null
+  }
+
+  const labels = Array.isArray(event.extra_json?.env_label) ? event.extra_json.env_label : []
+  const messages: string[] = []
+  labels.forEach((label) => {
+    if (label === 'too_dark') messages.push('光照过弱')
+    if (label === 'too_bright') messages.push('光照过强')
+    if (label === 'too_hot') messages.push('温度过高')
+    if (label === 'too_humid') messages.push('湿度过高')
+  })
+
+  return messages.length ? messages.join('，') : null
+}
+
+function getPostureEventMessage(event: EventRecord): string | null {
+  if (event.event_type === 'posture_reading_abnormal') {
+    return '看书姿势不正确'
+  }
+  if (event.event_type === 'posture_computer_abnormal') {
+    return '使用电脑姿势不正确'
+  }
+  return null
+}
+
 function buildOverview(payload: CurrentStatusPayload): StatusOverview {
-  const { telemetry, latest_event } = payload
-  const studyState = telemetry?.study_state ?? 'idle'
-  const presence = telemetry?.presence_state ?? 'away'
+  const { telemetry, latest_event, derived_state } = payload
+  const studyState = derived_state?.study_state ?? telemetry?.study_state ?? 'idle'
+  const presence = derived_state?.presence_state ?? telemetry?.presence_state ?? 'away'
 
   let headline = '设备待机中'
   let detail = '暂未检测到学习活动，等待入座后开始监测。'
@@ -100,7 +127,7 @@ function buildOverview(payload: CurrentStatusPayload): StatusOverview {
     detail = `已持续 ${formatDuration(telemetry?.study_duration)}，环境与坐姿状态正在监测中。`
   } else if (studyState === 'warning') {
     headline = '异常提醒'
-    detail = latest_event?.message ?? '检测到需要关注的异常行为或环境变化。'
+    detail = latest_event ? getEventMessage(latest_event) : '检测到需要关注的异常行为或环境变化。'
   } else if (presence === 'present') {
     headline = '已入座'
     detail = '检测到用户在位，等待进入正式学习状态。'
@@ -170,8 +197,8 @@ export function mapStatusToDashboard(
   payload: CurrentStatusPayload,
   previousValues?: Partial<Record<SensorKey, number>>,
 ): SensorDashboardPayload {
-  const { telemetry, heartbeat } = payload
-  const studyState = telemetry?.study_state ?? heartbeat?.study_state ?? 'idle'
+  const { telemetry, heartbeat, derived_state } = payload
+  const studyState = derived_state?.study_state ?? telemetry?.study_state ?? heartbeat?.study_state ?? 'idle'
   const updatedAt = formatTimestamp(telemetry?.timestamp ?? heartbeat?.timestamp)
 
   return {
@@ -196,8 +223,17 @@ export function getEventTypeLabel(eventType?: string | null): string {
   return EVENT_TYPE_LABEL[eventType ?? ''] ?? eventType ?? '系统事件'
 }
 
+export function getEventMessage(event: EventRecord): string {
+  return getEnvironmentEventMessage(event) ?? getPostureEventMessage(event) ?? event.message ?? ''
+}
+
 export function isBehaviorEvent(event: EventRecord): boolean {
-  return event.event_type === 'presence_away' || event.event_type === 'distance_too_close'
+  return (
+    event.event_type === 'presence_away' ||
+    event.event_type === 'distance_too_close' ||
+    event.event_type === 'posture_reading_abnormal' ||
+    event.event_type === 'posture_computer_abnormal'
+  )
 }
 
 export { eventLevelLabel, formatDuration }

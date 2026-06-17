@@ -3,6 +3,7 @@ import { useEvents } from '@/composables/useEvents'
 import {
   eventLevelLabel,
   formatEventTime,
+  getEventMessage,
   getEventTypeLabel,
   isBehaviorEvent,
 } from '@/api/statusMapper'
@@ -55,7 +56,7 @@ const { loading, error, events, page, total, totalPages, goToPage } = useEvents(
               </span>
             </div>
 
-            <p>{{ event.message }}</p>
+            <p>{{ getEventMessage(event) }}</p>
 
             <div class="event-item__meta">
               <span v-if="event.presence_state">在位：{{ event.presence_state === 'present' ? '在座' : '离桌' }}</span>

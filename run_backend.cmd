@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-call C:\Users\lyt\anaconda3\condabin\conda.bat activate smartled
+call D:\miniconda3\condabin\conda.bat activate studypilot
 python backend\run_local.py

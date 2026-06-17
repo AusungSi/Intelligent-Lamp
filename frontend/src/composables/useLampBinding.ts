@@ -15,6 +15,8 @@ import {
 } from '@/api/lampService'
 import type { LampCommand, LampStatePayload, MijiaDevice, MijiaStatus } from '@/types/lamp'
 
+const LAMP_SYNC_INTERVAL_MS = 2000
+
 export function useLampBinding() {
   const loading = ref(true)
   const busy = ref(false)
@@ -28,6 +30,36 @@ export function useLampBinding() {
   const qrImageUrl = ref<string | null>(null)
 
   let qrTimer: ReturnType<typeof setInterval> | null = null
+  let lampSyncTimer: ReturnType<typeof setInterval> | null = null
+
+  async function refreshLampSnapshot() {
+    if (busy.value || !lamp.value?.bound) {
+      return
+    }
+
+    try {
+      const [state, recentCommands] = await Promise.all([
+        fetchLampState(),
+        fetchLampCommands(8),
+      ])
+      lamp.value = state
+      commands.value = recentCommands
+      error.value = null
+    } catch (cause) {
+      if (!lamp.value) {
+        error.value = cause instanceof Error ? cause.message : '台灯状态同步失败'
+      }
+    }
+  }
+
+  function startLampSync() {
+    if (lampSyncTimer) {
+      clearInterval(lampSyncTimer)
+    }
+    lampSyncTimer = setInterval(() => {
+      void refreshLampSnapshot()
+    }, LAMP_SYNC_INTERVAL_MS)
+  }
 
   async function refresh() {
     loading.value = true
@@ -125,6 +157,16 @@ export function useLampBinding() {
   }) {
     busy.value = true
     try {
+      if (lamp.value?.state) {
+        lamp.value = {
+          ...lamp.value,
+          state: {
+            ...lamp.value.state,
+            ...payload,
+            mode: 'manual_override',
+          },
+        }
+      }
       lamp.value = await controlLamp({ ...payload, override_minutes: 30 })
       commands.value = await fetchLampCommands(8)
     } catch (cause) {
@@ -146,11 +188,15 @@ export function useLampBinding() {
 
   onMounted(() => {
     void refresh()
+    startLampSync()
   })
 
   onUnmounted(() => {
     if (qrTimer) {
       clearInterval(qrTimer)
+    }
+    if (lampSyncTimer) {
+      clearInterval(lampSyncTimer)
     }
   })
 

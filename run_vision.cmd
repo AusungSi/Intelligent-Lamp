@@ -2,10 +2,12 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "PYTHON=%USERPROFILE%\anaconda3\envs\smartled\python.exe"
+set "PYTHON=D:\miniconda3\envs\studypilot\python.exe"
 set "BACKEND_URL=http://127.0.0.1:5000"
 set "VISION_TOKEN=change-me"
 set "DEVICE_TOKEN=change-me"
+set "YOLO_CONFIG_DIR=%ROOT%output"
+set "MPLCONFIGDIR=%ROOT%output\matplotlib"
 
 if not exist "%PYTHON%" (
   echo Python not found: %PYTHON%
@@ -56,6 +58,8 @@ echo Source ID: %SOURCE_ID%
 echo Capture backend: %CAPTURE_BACKEND%
 
 cd /d "%ROOT%"
+if not exist "%YOLO_CONFIG_DIR%" mkdir "%YOLO_CONFIG_DIR%"
+if not exist "%MPLCONFIGDIR%" mkdir "%MPLCONFIGDIR%"
 if /i "%SMARTLAMP_DRY_RUN%"=="1" (
   echo Dry run only. Worker command:
   echo "%PYTHON%" vision\run_vision_worker.py --camera-profile "%CAMERA_PROFILE%" --source "%CAMERA_SOURCE%" --source-id "%SOURCE_ID%" --capture-backend "%CAPTURE_BACKEND%" --backend-url "%BACKEND_URL%" --vision-token "%VISION_TOKEN%" --device-token "%DEVICE_TOKEN%" --preview
