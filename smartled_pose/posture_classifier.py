@@ -311,9 +311,9 @@ def apply_side_view_overrides(decision: StateClassifierDecision, feature_row: di
         decision.label in {"reading_normal", "reading_abnormal"}
         and kp_ratio >= 0.34
         and bbox_ratio >= 1.03
-        and shoulder_ratio >= 1.60
-        and nose_x <= 0.13
-        and 0.32 <= nose_y <= 0.42
+        and shoulder_ratio >= 1.55
+        and nose_x <= 0.17
+        and nose_y <= 0.49
     ):
         return StateClassifierDecision(
             label="computer_abnormal",
@@ -325,11 +325,11 @@ def apply_side_view_overrides(decision: StateClassifierDecision, feature_row: di
     if (
         decision.label in {"reading_normal", "reading_abnormal"}
         and kp_ratio >= 0.34
-        and 0.84 <= bbox_ratio <= 1.10
-        and head_deviation >= 0.62
+        and 0.80 <= bbox_ratio <= 1.10
+        and head_deviation >= 0.58
         and forward_ratio <= 0.65
         and nose_x >= 0.18
-        and nose_y <= 0.34
+        and nose_y <= 0.35
     ):
         return StateClassifierDecision(
             label="computer_normal",
@@ -341,10 +341,11 @@ def apply_side_view_overrides(decision: StateClassifierDecision, feature_row: di
     if (
         decision.label == "reading_abnormal"
         and kp_ratio >= 0.34
-        and bbox_ratio <= 0.80
-        and 0.40 <= nose_y <= 0.49
-        and head_deviation >= 0.54
-        and shoulder_ratio <= 1.50
+        and bbox_ratio <= 0.88
+        and 0.35 <= nose_y <= 0.49
+        and head_deviation >= 0.50
+        and shoulder_ratio <= 1.57
+        and nose_x >= 0.24
     ):
         return StateClassifierDecision(
             label="reading_normal",
