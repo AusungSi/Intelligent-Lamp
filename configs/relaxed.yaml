@@ -24,7 +24,7 @@ selection:
   kp_confidence: 0.3
 
 rules:
-  kp_valid_ratio_min: 0.4
+  kp_valid_ratio_min: 0.32
   seated_candidate_seconds: 1.5
   absent_seconds: 2.0
   warning_hold_seconds: 1.0
