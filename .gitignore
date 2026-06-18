@@ -23,6 +23,9 @@ frontend/.npm-cache/
 # Local browser/debug artifacts
 .playwright-cli/
 output/playwright/
+output/runtime_logs/
+output/Ultralytics/
+backup/
 
 # Local camera profile with private device IPs
 vision/camera_sources.json
