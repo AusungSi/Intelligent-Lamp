@@ -3,6 +3,7 @@ __pycache__/
 *.pyo
 *.pyd
 .DS_Store
+~$*.docx
 
 # Local ESP32 secrets
 device/secrets.json
